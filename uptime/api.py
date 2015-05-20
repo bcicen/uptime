@@ -3,7 +3,6 @@ from flask import Flask,Response,request,render_template
 from flask_restful import Api,abort
 from config import __version__,auth_key,Config
 from resources import Hello,Checks
-from monitor import Uptime
 
 appdir = os.path.dirname(os.path.realpath(__file__))
 
