@@ -13,6 +13,18 @@ class Hello(Resource):
         return {},403
 
 class Checks(Resource):
+    def delete(self):
+        args = self._parse()
+        self._check_auth(args['key'])
+
+        etcd = app.config['ETCD']
+        try:
+            res = etcd.delete('/checks/' + args['id'])
+        except KeyError:
+            abort(404)
+
+        return {'ok':True},200
+
     def get(self):
         args = self._parse()
         self._check_auth(args['key'])
@@ -28,12 +40,12 @@ class Checks(Resource):
         del args['key']
         check_id = str(uuid.uuid1())
         if not args['interval']:
-            args['interval'] = 5
+            args['interval'] = 15
 
         etcd = app.config['ETCD']
         etcd.set('/checks/' + check_id, json.dumps(args))
 
-        return {},200
+        return {'id':check_id},200
 
     def _parse(self):
         parser = reqparse.RequestParser()
@@ -41,6 +53,7 @@ class Checks(Resource):
         parser.add_argument('url', type=str)
         parser.add_argument('interval', type=int)
         parser.add_argument('content', type=str)
+        parser.add_argument('id', type=str)
         return parser.parse_args()
 
     def _check_auth(self,key):

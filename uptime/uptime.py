@@ -15,7 +15,7 @@ class Check(object):
     """
     def __init__(self,id,check_json):
         defaults = { 'content'  : None,
-                     'interval' : 5 }
+                     'interval' : 15 }
 
         self.__dict__ = jsontree.loads(check_json)
 
@@ -25,6 +25,7 @@ class Check(object):
                 self.__setattr__(k,v)
 
         self.id = id
+        self.name = id
         self.last = datetime.utcnow()
         self.failures = 0
         self.notified = False
@@ -74,7 +75,7 @@ class Uptime(object):
         now = datetime.utcnow()
 
         if (now - self.last_check_update).seconds > self.check_refresh:
-            self.checks = self.checks + self._new_checks()
+            self._update_checks()
             self.last_check_update = now
 
         if not self.checks:
@@ -92,22 +93,25 @@ class Uptime(object):
                         n in range(1,self.concurrency) ]
         gevent.joinall(workers)
 
-    def _new_checks(self):
+    def _update_checks(self):
         """
-        returns a list of check objects from a path in etcd 
-        if not already instantiated 
+        update list of check objects from a path in etcd 
+        if not already instantiated. removes deleted checks. 
         """
-        new_checks = []
-        current = [ c.id for c in self.checks ]
-        all_checks = { c.key:c.value for c in \
+        current_ids = [ c.id for c in self.checks ]
+        etcd_checks = { c.key:c.value for c in \
                 self.etcd.read(self.check_path).children if not c.dir }
+        etcd_ids = [ os.path.basename(k) for k in etcd_checks.keys() ] 
 
-        for k,v in all_checks.iteritems():
+        #remove old checks
+        for check in self.checks:
+            if check.id not in etcd_ids:
+                self.checks.remove(check)
+        
+        for k,v in etcd_checks.iteritems():
             check_id = os.path.basename(k)
-            if check_id not in current:
-                new_checks.append(Check(check_id,v))
-
-        return new_checks
+            if check_id not in current_ids:
+                self.checks.append(Check(check_id,v))
 
     def _worker(self):
         """

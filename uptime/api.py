@@ -16,6 +16,10 @@ app.config['ETCD'] = etcd.Client(host=app.config['ETCD_HOST'],
 api.add_resource(Hello, '/')
 api.add_resource(Checks, '/checks')
 
+@app.errorhandler(200)
+def forbidden_200(exception):
+    return 'not found', 200
+
 @app.errorhandler(403)
 def forbidden_403(exception):
     return 'unauthorized', 403
