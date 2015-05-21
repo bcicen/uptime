@@ -68,29 +68,13 @@ class Uptime(object):
         except KeyError:
             self.etcd.write(self.check_path, None, dir=True)
 
-        while True:
-          self.run()
+        self.start()
 
-    def run(self):
-        now = datetime.utcnow()
-
-        if (now - self.last_check_update).seconds > self.check_refresh:
-            self._update_checks()
-            self.last_check_update = now
-
-        if not self.checks:
-            print('no checks loaded, sleeping 5s')
-            sleep(10)
-            return
-
-        [ self.jobs.put_nowait(c) for c in self.checks if \
-                (now - c.last).seconds > c.interval ]
-
-        self.launch_workers()
-
-    def launch_workers(self):
+    def start(self):
         workers = [ gevent.spawn(self._worker) for \
                         n in range(1,self.concurrency) ]
+        workers.append(gevent.spawn(self._controller))
+
         gevent.joinall(workers)
 
     def _update_checks(self):
@@ -113,32 +97,50 @@ class Uptime(object):
             if check_id not in current_ids:
                 self.checks.append(Check(check_id,v))
 
+    def _controller(self):
+        while True:
+            now = datetime.utcnow()
+
+            if (now - self.last_check_update).seconds > self.check_refresh:
+                self._update_checks()
+                self.last_check_update = now
+
+            [ self.jobs.put_nowait(c) for c in self.checks if \
+                (now - c.last).seconds > c.interval ]
+
     def _worker(self):
         """
         """
-        while not self.jobs.empty():
-            check = self.jobs.get()
+        while True:
+            while not self.jobs.empty():
+                check = self.jobs.get()
             
-            log.info('checking %s' % check.url)
+                log.info('checking %s' % check.url)
 
-            result = self._check_url(check.url,check.content)
+                result = self._check_url(check.url,check.content)
             
-            if result['ok']:
-                check.response_time = result['elapsed']
-                check.last = datetime.utcnow()
-                check.ok()
-            else:
-                check.failures += 1 
+                if result['ok']:
+                    check.response_time = result['elapsed']
+                    check.last = datetime.utcnow()
+                    check.ok()
+                else:
+                    check.failures += 1 
+                
+                if check.failures > 3 if not check.notified and self.notifier:
+                    log.info('sending notification for failed check')
+                    self.notifier.notify('url check failure for %s -- %s' % \
+                            (check.url,result['reason']))
 
-            if check.failures > 3 and not check.notified and self.notifier:
-                log.info('sending notification for failed check')
-                self.notifier.notify('url check failure for %s -- %s' % \
-                        (check.url,result['reason']))
+                     check.notified = True
 
-                check.notified = True
+                #after 10 failures, return to normal interval to prevent
+                #excessive checks
+                if check.failures > 10:
+                    check.last = datetime.utcnow()
 
-            self.etcd.set('/checks/' + check.id, check.json())
-            gevent.sleep(0)
+                self.etcd.set('/checks/' + check.id, check.json())
+
+            gevent.sleep(1)
 
     def _check_url(self,url,content):
         try:
