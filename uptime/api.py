@@ -1,4 +1,4 @@
-import os,jinja2,etcd
+import os,jinja2,etcd,json
 from flask import Flask,Response,request,render_template
 from flask_restful import Api,abort
 from config import __version__,auth_key,Config
@@ -15,6 +15,21 @@ app.config['ETCD'] = etcd.Client(host=app.config['ETCD_HOST'],
 
 api.add_resource(Hello, '/')
 api.add_resource(Checks, '/checks')
+
+def sorter(d):
+    return d['response_time']
+
+@app.route('/checkview',methods=["GET"])
+def buildview():
+    if request.args['key'] != auth_key:
+        abort(403)
+
+    etcd = app.config['ETCD']
+    checks = [ json.loads(c.value) for c in \
+                etcd.read('/checks').children if not c.dir ]
+
+    return render_template('index.html',
+            checks=sorted(checks,key=sorter,reverse=True))
 
 @app.errorhandler(200)
 def forbidden_200(exception):
