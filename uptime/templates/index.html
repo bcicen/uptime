@@ -79,6 +79,7 @@
         <th>URL</th>
         <th>Response Time</th>
         <th>Failures</th>
+        <th>Source</th>
       </tr>
     </thead>
     <tbody>
@@ -95,6 +96,7 @@
 				{% else %}
 	        <td class="green"><b>{{ check['failures'] }}</b></td>
 			  {% endif %}
+        <td><b>{{ check['source'] }}</b></td>
       </tr>
 		  {% endfor %}
     </tbody>

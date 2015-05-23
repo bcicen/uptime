@@ -3,6 +3,6 @@ Flask-RESTful==0.3.2
 gevent==1.0.1
 Jinja2==2.6
 jsontree==0.4.3
-python-etcd==0.3.2
+python-etcd==0.3.3
 requests==2.6.0
 gunicorn==0.17.4

@@ -1,12 +1,13 @@
 import gevent,requests,logging,json,etcd,jsontree,os
 from datetime import datetime
 from gevent.queue import Queue
+from threading import Thread
 from requests.exceptions import ConnectionError
+from socket import getfqdn
 from notifiers import SlackNotifier
-from time import sleep
 from config import Config
 
-logging.basicConfig(level=logging.WARN)
+logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger('uptime')
 
 class Check(object):
@@ -48,10 +49,14 @@ class Uptime(object):
     jobs = Queue()
 
     def __init__(self,etcd_host='localhost',etcd_port=4001,concurrency=5):
+        if Config.__dict__.has_key('SOURCE'):
+            self.source = Config.SOURCE
+        else:
+            self.source = getfqdn()
+
         self.checks = []
         self.check_path = '/checks'
-        self.check_refresh = 5
-        self.last_check_update = datetime(1,1,1)
+        self.results_path = self.check_path + '/results/' + self.source
         self.concurrency = concurrency
 
         if Config.__dict__.has_key('SLACK_URL'):
@@ -63,54 +68,53 @@ class Uptime(object):
         self.etcd = etcd.Client(host=etcd_host,port=etcd_port)
 
         #create checks dir if not exist
-        try:
-            self.etcd.read(self.check_path)
-        except KeyError:
-            self.etcd.write(self.check_path, None, dir=True)
+        for path in '/', '/config', '/results', self.results_path:
+            try:
+                self.etcd.write(self.check_path + path,None,dir=True)
+            except etcd.EtcdNotFile:
+                pass
 
         self.start()
 
     def start(self):
-        workers = [ gevent.spawn(self._worker) for \
-                        n in range(1,self.concurrency) ]
+        workers = [ gevent.spawn(self._check_worker) for \
+                    n in range(1,self.concurrency) ]
         workers.append(gevent.spawn(self._controller))
+
+        t = Thread(target=self._watcher)
+        t.daemon = True
+        t.start()
 
         gevent.joinall(workers)
 
-    def _update_checks(self):
+    def _watcher(self):
         """
-        update list of check objects from a path in etcd 
-        if not already instantiated. removes deleted checks. 
+        Worker to watch etcd for key changes, updating accordingly
         """
-        current_ids = [ c.id for c in self.checks ]
-        etcd_checks = { c.key:c.value for c in \
-                self.etcd.read(self.check_path).children if not c.dir }
-        etcd_ids = [ os.path.basename(k) for k in etcd_checks.keys() ] 
-
-        #remove old checks
-        for check in self.checks:
-            if check.id not in etcd_ids:
-                self.checks.remove(check)
-        
-        for k,v in etcd_checks.iteritems():
-            check_id = os.path.basename(k)
-            if check_id not in current_ids:
-                self.checks.append(Check(check_id,v))
+        path = self.check_path + '/config'
+        for event in self.etcd.eternal_watch(path, recursive=True):
+            if event.action == 'set':
+                self._add_check(event.key,event.value)
+            if event.action == 'delete':
+                self._remove_check(event.key)
 
     def _controller(self):
+        """
+        Controller worker. Submits any overdue checks to queue.
+        """
         while True:
             now = datetime.utcnow()
-
-            if (now - self.last_check_update).seconds > self.check_refresh:
-                self._update_checks()
-                self.last_check_update = now
 
             [ self.jobs.put_nowait(c) for c in self.checks if \
                 (now - c.last).seconds > c.interval ]
 
-    def _worker(self):
+            gevent.sleep(0)
+
+    def _check_worker(self):
         """
+        Worker to perform url checks
         """
+        print('worker started')
         while True:
             while not self.jobs.empty():
                 check = self.jobs.get()
@@ -119,28 +123,38 @@ class Uptime(object):
 
                 result = self._check_url(check.url,check.content)
             
+                check.response_time = result['elapsed']
+
                 if result['ok']:
-                    check.response_time = result['elapsed']
                     check.last = datetime.utcnow()
                     check.ok()
                 else:
                     check.failures += 1 
                 
-                if check.failures > 3 if not check.notified and self.notifier:
+                if check.failures > 3 and not check.notified and self.notifier:
                     log.info('sending notification for failed check')
                     self.notifier.notify('url check failure for %s -- %s' % \
                             (check.url,result['reason']))
 
-                     check.notified = True
+                    check.notified = True
 
                 #after 10 failures, return to normal interval to prevent
                 #excessive checks
                 if check.failures > 10:
                     check.last = datetime.utcnow()
 
-                self.etcd.set('/checks/' + check.id, check.json())
+                path = self.results_path + '/' + check.id
+                self.etcd.set(path,check.json())
 
-            gevent.sleep(1)
+            gevent.sleep(0)
+
+    def _add_check(self,key,value):
+        id = os.path.basename(key)
+        self.checks.append(Check(id,value))
+
+    def _remove_check(self,key):
+        id = os.path.basename(key)
+        [ self.checks.remove(c) for c in self.checks if c.id == id ]
 
     def _check_url(self,url,content):
         try:
@@ -151,11 +165,15 @@ class Uptime(object):
 
         log.debug('%s returned %s' % (url,r.status_code))
         if not r.ok:
-            return { 'ok':False,'reason': r.status_code } 
+            return { 'ok':False,
+                     'reason': r.status_code,
+                     'elapsed':r.elapsed.total_seconds() } 
         if content and not content in r.text:
-            return { 'ok':False,'reason': 'content check failure' }
+            return { 'ok':False,
+                     'reason': 'content check failure',
+                     'elapsed':r.elapsed.total_seconds() }
         
         return { 'ok':True,'elapsed':r.elapsed.total_seconds() }
 
 if __name__ == '__main__':
-    um = Uptime()
+    ut = Uptime()
