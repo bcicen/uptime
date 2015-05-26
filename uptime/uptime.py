@@ -7,7 +7,7 @@ from socket import getfqdn
 from notifiers import SlackNotifier
 from config import Config
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.WARN)
 log = logging.getLogger('uptime')
 
 class Check(object):
@@ -92,7 +92,7 @@ class Uptime(object):
         Worker to watch etcd for key changes, updating accordingly
         """
         path = self.check_path + '/config'
-        for event in self.etcd.eternal_watch(path, recursive=True):
+        for event in self._etcd_events:
             if event.action == 'set':
                 self._add_check(event.key,event.value)
             if event.action == 'delete':
@@ -147,6 +147,14 @@ class Uptime(object):
                 self.etcd.set(path,check.json())
 
             gevent.sleep(0)
+
+    def _etcd_events(self,path):
+        """
+        Generator to yield events from etcd watch
+        """
+        while True:
+            event = self.etcd.watch(path, recursive=True)
+            yield event
 
     def _add_check(self,key,value):
         id = os.path.basename(key)
