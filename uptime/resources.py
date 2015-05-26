@@ -1,4 +1,4 @@
-import json,uuid
+import json,uuid,os
 from flask import current_app
 from flask_restful import Resource,Api,reqparse,request,abort
 from config import auth_key
@@ -18,10 +18,20 @@ class Checks(Resource):
         self._check_auth(args['key'])
 
         etcd = app.config['ETCD']
-        try:
-            res = etcd.delete('/checks/' + args['id'])
-        except KeyError:
-            abort(404)
+
+        if args['id'] == 'all':
+            try:
+                etcd.delete('/checks/config' + args['id'],recursive=True)
+                etcd.delete('/checks/results' + args['id'],recursive=True)
+            except KeyError:
+                pass
+        else:
+            matching = [ c.key for c in etcd.read('/checks',recursive=True).children if args['id'] in c.key ]
+            for key in matching:
+                try:
+                    etcd.delete(key)
+                except KeyError:
+                    pass
 
         return {'ok':True},200
 
@@ -29,8 +39,14 @@ class Checks(Resource):
         args = self._parse()
         self._check_auth(args['key'])
         etcd = app.config['ETCD']
-        return { c.key:json.loads(c.value) for c in \
-                etcd.read('/checks').children if not c.dir }
+
+        ret = {}
+        sources = [ c.key for c in etcd.read('/checks/results/').children ]
+        for s in sources:
+            ret[os.path.basename(s)] = { c.key:json.loads(c.value) for c in \
+                                         etcd.read(s).children if not c.dir }
+
+        return ret
 
     def post(self):
         args = self._parse()
@@ -43,7 +59,7 @@ class Checks(Resource):
             args['interval'] = 15
 
         etcd = app.config['ETCD']
-        etcd.set('/checks/' + check_id, json.dumps(args))
+        etcd.set('/checks/config/' + check_id, json.dumps(args))
 
         return {'id':check_id},200
 

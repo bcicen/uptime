@@ -25,11 +25,15 @@ def buildview():
         abort(403)
 
     etcd = app.config['ETCD']
-    checks = [ json.loads(c.value) for c in \
-                etcd.read('/checks').children if not c.dir ]
+
+    r = etcd.read('/checks/results',recursive=True).children
+    checks = { c.key:json.loads(c.value) for c in r if not c.dir }
+
+    for k,v in checks.iteritems():
+        v['source'] = k.split('/')[3]
 
     return render_template('index.html',
-            checks=sorted(checks,key=sorter,reverse=True))
+            checks=sorted(checks.itervalues(),key=sorter,reverse=True))
 
 @app.errorhandler(200)
 def forbidden_200(exception):
