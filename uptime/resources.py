@@ -1,7 +1,6 @@
 import json,uuid,os
 from flask import current_app
 from flask_restful import Resource,Api,reqparse,request,abort
-from config import auth_key
 
 app = current_app
 
@@ -73,5 +72,5 @@ class Checks(Resource):
         return parser.parse_args()
 
     def _check_auth(self,key):
-        if key != auth_key:
+        if key != app.config['AUTH_KEY']:
             abort(403)

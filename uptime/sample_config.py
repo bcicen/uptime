@@ -1,5 +1,4 @@
 __version__ = '0.1'
-auth_key = 'changeme'
 
 class Config(object):
     #SLACK_URL = ''
