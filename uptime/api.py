@@ -6,7 +6,6 @@ from config import __version__,Config
 from resources import Hello,Checks
 
 appdir = os.path.dirname(os.path.realpath(__file__))
-dd
 app = Flask('uptime',template_folder=appdir + '/templates')
 api = Api(app)
 

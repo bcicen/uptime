@@ -2,7 +2,8 @@ import gevent,requests,logging,json,etcd,jsontree,os
 from datetime import datetime
 from gevent.queue import Queue
 from threading import Thread
-from requests.exceptions import ConnectionError
+from requests.exceptions import ConnectionError,Timeout
+from time import sleep
 from socket import getfqdn
 from notifiers import SlackNotifier
 from config import Config
@@ -25,7 +26,7 @@ class Check(object):
             if not self.__dict__.has_key(k):
                 self.__setattr__(k,v)
 
-        self.id = id
+        self.id = str(id)
         self.name = id
         self.last = datetime.utcnow()
         self.failures = 0
@@ -49,6 +50,10 @@ class Uptime(object):
     jobs = Queue()
 
     def __init__(self,etcd_host='localhost',etcd_port=4001,concurrency=5):
+        if Config.__dict__.has_key('ETCD_HOST'):
+            etcd_host = Config.ETCD_HOST
+        if Config.__dict__.has_key('ETCD_PORT'):
+            etcd_port = Config.ETCD_PORT
         if Config.__dict__.has_key('SOURCE'):
             self.source = Config.SOURCE
         else:
@@ -89,14 +94,26 @@ class Uptime(object):
 
     def _watcher(self):
         """
-        Worker to watch etcd for key changes, updating accordingly
+        Worker to poll etcd for key changes, updating accordingly
         """
         path = self.check_path + '/config'
-        for event in self._etcd_events:
-            if event.action == 'set':
-                self._add_check(event.key,event.value)
-            if event.action == 'delete':
-                self._remove_check(event.key)
+        while True:
+            configs = {}
+            for c in self.etcd.read(path,recursive=True).children:
+                if not c.dir:
+                    configs[c.key] = c.value
+
+            #add all checks
+            for k,v in configs.iteritems():
+                self._add_check(k,v)
+
+            #cleanup removed checks
+            config_ids = [ os.path.basename(k) for k in configs ] 
+            for c in self.checks:
+                if c.id not in config_ids:
+                    self._remove_check(id)
+
+            sleep(5)
 
     def _controller(self):
         """
@@ -148,27 +165,24 @@ class Uptime(object):
 
             gevent.sleep(0)
 
-    def _etcd_events(self,path):
-        """
-        Generator to yield events from etcd watch
-        """
-        while True:
-            event = self.etcd.watch(path, recursive=True)
-            yield event
-
     def _add_check(self,key,value):
         id = os.path.basename(key)
-        self.checks.append(Check(id,value))
+        if id in [ str(c.id) for c in self.checks]:
+            log.debug('skipping existing check for %s' % id)
+        else:
+            self.checks.append(Check(id,value))
 
-    def _remove_check(self,key):
-        id = os.path.basename(key)
+    def _remove_check(self,id):
         [ self.checks.remove(c) for c in self.checks if c.id == id ]
 
     def _check_url(self,url,content):
         try:
-            r = requests.get(url)
+            r = requests.get(url,timeout=5)
         except ConnectionError as e:
             log.warn('unable to reach %s:\n%s' % (url,e))
+            return { 'ok':False,'reason':e }
+        except Timeout as e:
+            log.warn('connection timed out checking %s:\n%s' % (url,e))
             return { 'ok':False,'reason':e }
 
         log.debug('%s returned %s' % (url,r.status_code))
