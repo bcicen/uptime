@@ -13,5 +13,4 @@ RUN pip install -r requirements.txt
 
 COPY . /app/
 
-WORKDIR /rpp/
-CMD /bin/bash run.sh
+CMD /bin/bash /app/run.sh
