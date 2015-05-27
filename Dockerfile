@@ -11,7 +11,7 @@ RUN curl -L $ETCD_URL -o /tmp/etcd.tar.gz && \
 COPY requirements.txt /
 RUN pip install -r requirements.txt
 
-COPY . /usr/src/app/
+COPY . /app/
 
-WORKDIR /usr/src/app/
+WORKDIR /rpp/
 CMD /bin/bash run.sh
