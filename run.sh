@@ -11,6 +11,6 @@ else
 	sed -i "s/4001/$ETCD_PORT/g" /app/uptime/config.py
 fi
 
-cd uptime/
+cd /app/uptime/
 python2 uptime.py &
 gunicorn --bind=0.0.0.0:8000 api:app
