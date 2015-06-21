@@ -5,18 +5,27 @@ from uuid import uuid4
 from config import __version__,Config
 from resources import Hello,Checks
 
+DEFAULTS = { 'ETCD_HOST': '127.0.0.1',
+             'ETCD_PORT': '4001',
+             'DEBUG'    : False,
+             'AUTH_KEY' : str(uuid4().hex) }
+
 appdir = os.path.dirname(os.path.realpath(__file__))
 app = Flask('uptime',template_folder=appdir + '/templates')
 api = Api(app)
 
-#Load config, create global etcd client
+#Load config
 app.config.from_object(Config)
+
+for k,v in DEFAULTS.iteritems():
+    if not app.config.has_key(k):
+        app.config[k] = v
+
+#Create app etcd client
 app.config['ETCD'] = etcd.Client(host=app.config['ETCD_HOST'],
                                  port=app.config['ETCD_PORT'])
-if not app.config.has_key('AUTH_KEY'):
-    auth_key = str(uuid4().hex)
-    app.config['AUTH_KEY'] = auth_key
-    print('Starting uptime with auth_key: %s' % (auth_key))
+
+print('Starting uptime with auth_key: %s' % (auth_key))
 
 api.add_resource(Hello, '/')
 api.add_resource(Checks, '/checks')
