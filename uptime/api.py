@@ -25,7 +25,7 @@ for k,v in DEFAULTS.iteritems():
 app.config['ETCD'] = etcd.Client(host=app.config['ETCD_HOST'],
                                  port=app.config['ETCD_PORT'])
 
-print('Starting uptime with auth_key: %s' % (auth_key))
+print('Starting uptime with auth_key: %s' % (app.config['AUTH_KEY']))
 
 api.add_resource(Hello, '/')
 api.add_resource(Checks, '/checks')
