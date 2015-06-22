@@ -180,10 +180,10 @@ class Uptime(object):
             r = requests.get(url,timeout=5)
         except ConnectionError as e:
             log.warn('unable to reach %s:\n%s' % (url,e))
-            return { 'ok':False,'reason':e }
+            return { 'ok':False,'reason':e,'elapsed':0 }
         except Timeout as e:
             log.warn('connection timed out checking %s:\n%s' % (url,e))
-            return { 'ok':False,'reason':e }
+            return { 'ok':False,'reason':e,'elapsed':elapsed.total_seconds() }
 
         log.debug('%s returned %s' % (url,r.status_code))
         if not r.ok:
