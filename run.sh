@@ -1,6 +1,8 @@
 #!/bin/bash
 
-cp /app/uptime/sample_config.py /app/uptime/config.py
+[ ! -f /app/uptime/config.py ] && { 
+ cp -v /app/uptime/sample_config.py /app/uptime/config.py
+}
 
 if [ -z "$ETCD_HOST" ]; then
 	etcd &
