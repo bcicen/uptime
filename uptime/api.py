@@ -1,12 +1,13 @@
-import os,jinja2,etcd,json
+import os,jinja2,json
 from flask import Flask,Response,request,render_template
 from flask_restful import Api,abort
+from redis import StrictRedis
 from uuid import uuid4
 from config import __version__,Config
 from resources import Hello,Checks
 
-DEFAULTS = { 'ETCD_HOST': '127.0.0.1',
-             'ETCD_PORT': '4001',
+DEFAULTS = { 'REDIS_HOST': '127.0.0.1',
+             'REDIS_PORT': '6379',
              'DEBUG'    : False,
              'AUTH_KEY' : str(uuid4().hex) }
 
@@ -21,9 +22,9 @@ for k,v in DEFAULTS.iteritems():
     if not app.config.has_key(k):
         app.config[k] = v
 
-#Create app etcd client
-app.config['ETCD'] = etcd.Client(host=app.config['ETCD_HOST'],
-                                 port=app.config['ETCD_PORT'])
+#Create app REDIS client
+app.config['REDIS'] = StrictRedis(host=app.config['REDIS_HOST'],
+                                  port=app.config['REDIS_PORT'])
 
 print('Starting uptime with auth_key: %s' % (app.config['AUTH_KEY']))
 
@@ -31,23 +32,20 @@ api.add_resource(Hello, '/')
 api.add_resource(Checks, '/checks')
 
 def sorter(d):
-    return d['response_time']
+    return float(d['response_time'])
 
 @app.route('/checkview',methods=["GET"])
 def buildview():
     if request.args['key'] != app.config['AUTH_KEY']:
         abort(403)
 
-    etcd = app.config['ETCD']
+    r = app.config['REDIS']
 
-    r = etcd.read('/checks/results',recursive=True).children
-    checks = { c.key:json.loads(c.value) for c in r if not c.dir }
-
-    for k,v in checks.iteritems():
-        v['source'] = k.split('/')[3]
+    checks = [ json.loads(r.get(k)) for k in \
+                r.keys(pattern='uptime_results:*') ]
 
     return render_template('index.html',
-            checks=sorted(checks.itervalues(),key=sorter,reverse=True))
+            checks=sorted(checks,key=sorter,reverse=True))
 
 @app.errorhandler(200)
 def forbidden_200(exception):

@@ -6,7 +6,7 @@ app = current_app
 
 class Hello(Resource):
     def get(self):
-        return {},403
+        return {},200
 
     def post(self):
         return {},403
@@ -16,36 +16,27 @@ class Checks(Resource):
         args = self._parse()
         self._check_auth(args['key'])
 
-        etcd = app.config['ETCD']
+        redis = app.config['REDIS']
 
         if args['id'] == 'all':
+            for k in redis.keys(pattern='uptime*'):
+                redis.delete(k)
+        else:
             try:
-                etcd.delete('/checks/config' + args['id'],recursive=True)
-                etcd.delete('/checks/results' + args['id'],recursive=True)
+                redis.delete('uptime_config:' + args['id'])
             except KeyError:
                 pass
-        else:
-            matching = [ c.key for c in etcd.read('/checks',recursive=True).children if args['id'] in c.key ]
-            for key in matching:
-                try:
-                    etcd.delete(key)
-                except KeyError:
-                    pass
 
         return {'ok':True},200
 
     def get(self):
         args = self._parse()
         self._check_auth(args['key'])
-        etcd = app.config['ETCD']
+        r = app.config['REDIS']
 
-        ret = {}
-        sources = [ c.key for c in etcd.read('/checks/results/').children ]
-        for s in sources:
-            ret[os.path.basename(s)] = { c.key:json.loads(c.value) for c in \
-                                         etcd.read(s).children if not c.dir }
+        results = [ json.loads(r.get(k)) for k in r.keys(pattern='uptime_results:*') ]
 
-        return ret
+        return results
 
     def post(self):
         args = self._parse()
@@ -53,22 +44,28 @@ class Checks(Resource):
 
         #remove key from our args and generate a unique id for this check
         del args['key']
+        for k in ['id','content']:
+            if args[k] == None:
+                del args[k]
+
         check_id = str(uuid.uuid1())
+        args['check_id'] = check_id
+
         if not args['interval']:
             args['interval'] = 15
 
-        etcd = app.config['ETCD']
-        etcd.set('/checks/config/' + check_id, json.dumps(args))
+        redis = app.config['REDIS']
+        redis.set('uptime_config:' + check_id,json.dumps(args))
 
-        return {'id':check_id},200
+        return {'check_id':check_id},200
 
     def _parse(self):
         parser = reqparse.RequestParser()
         parser.add_argument('key', type=str)
         parser.add_argument('url', type=str)
+        parser.add_argument('id', type=str)
         parser.add_argument('interval', type=int)
         parser.add_argument('content', type=str)
-        parser.add_argument('id', type=str)
         return parser.parse_args()
 
     def _check_auth(self,key):

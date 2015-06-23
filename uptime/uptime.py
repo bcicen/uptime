@@ -1,4 +1,10 @@
-import gevent,requests,logging,json,etcd,jsontree,os
+import gevent
+import requests
+import logging
+import json
+import jsontree
+import os
+from redis import StrictRedis
 from datetime import datetime
 from gevent.queue import Queue
 from threading import Thread
@@ -15,7 +21,7 @@ class Check(object):
     """
     URL Check configuration object
     """
-    def __init__(self,id,check_json):
+    def __init__(self,check_json):
         defaults = { 'content'  : None,
                      'interval' : 15 }
 
@@ -26,15 +32,17 @@ class Check(object):
             if not self.__dict__.has_key(k):
                 self.__setattr__(k,v)
 
-        self.id = str(id)
-        self.name = id
-        self.last = datetime.utcnow()
+        self.check_id = str(self.check_id)
+        self.name = self.check_id
+
         self.failures = 0
         self.notified = False
-        print('loaded check %s for url %s' % (self.id,self.url))
-        log.debug(self.json())
 
-    def json(self):
+        self.last = datetime.utcnow()
+        self.interval = int(self.interval)
+        print('loaded check %s for url %s' % (self.check_id,self.url))
+
+    def dump_json(self):
         ret = jsontree.clone(self.__dict__)
         del ret['last']
         return json.dumps(ret)
@@ -49,35 +57,29 @@ class Check(object):
 class Uptime(object):
     jobs = Queue()
 
-    def __init__(self,etcd_host='localhost',etcd_port=4001,concurrency=5):
-        if Config.__dict__.has_key('ETCD_HOST'):
-            etcd_host = Config.ETCD_HOST
-        if Config.__dict__.has_key('ETCD_PORT'):
-            etcd_port = Config.ETCD_PORT
+    def __init__(self,redis_host='localhost',redis_port=6379,concurrency=5):
+        if Config.__dict__.has_key('REDIS_HOST'):
+            redis_host = Config.REDIS_HOST
+        if Config.__dict__.has_key('REDIS_PORT'):
+            redis_port  = Config.REDIS_PORT
         if Config.__dict__.has_key('SOURCE'):
             self.source = Config.SOURCE
         else:
             self.source = getfqdn()
 
         self.checks = []
-        self.check_path = '/checks'
-        self.results_path = self.check_path + '/results/' + self.source
+        self.config_path = 'uptime_config:'
+        self.results_path = 'uptime_results:' + self.source + ':'
+
         self.concurrency = concurrency
 
         if Config.__dict__.has_key('SLACK_URL'):
             self.notifier = SlackNotifier(Config.SLACK_URL)
         else:
             log.warn('No notifiers configured')
-            self.notified = None
+            self.notifier = None
 
-        self.etcd = etcd.Client(host=etcd_host,port=etcd_port)
-
-        #create checks dir if not exist
-        for path in '/', '/config', '/results', self.results_path:
-            try:
-                self.etcd.write(self.check_path + path,None,dir=True)
-            except etcd.EtcdNotFile:
-                pass
+        self.redis = StrictRedis(host=redis_host,port=redis_port)
 
         self.start()
 
@@ -94,26 +96,27 @@ class Uptime(object):
 
     def _watcher(self):
         """
-        Worker to poll etcd for key changes, updating accordingly
+        Worker to poll redis for key changes, updating accordingly
         """
-        path = self.check_path + '/config'
         while True:
-            configs = {}
-            for c in self.etcd.read(path,recursive=True).children:
-                if not c.dir:
-                    configs[c.key] = c.value
+            configs = self._get_configs()
 
             #add all checks
-            for k,v in configs.iteritems():
-                self._add_check(k,v)
+            for c in configs:
+                self._add_check(c)
 
             #cleanup removed checks
-            config_ids = [ os.path.basename(k) for k in configs ] 
+            config_ids = [ str(c['check_id']) for c in configs ] 
             for c in self.checks:
-                if c.id not in config_ids:
-                    self._remove_check(id)
+                if c.check_id not in config_ids:
+                    self._remove_check(c.check_id)
 
             sleep(5)
+
+    def _get_configs(self):
+        pattern = self.config_path + '*'
+        return [ json.loads(self.redis.get(k)) for \
+                k in self.redis.keys(pattern) ]
 
     def _controller(self):
         """
@@ -150,8 +153,11 @@ class Uptime(object):
                 
                 if check.failures > 3 and not check.notified and self.notifier:
                     log.info('sending notification for failed check')
-                    self.notifier.notify('url check failure for %s -- %s' % \
-                            (check.url,result['reason']))
+                    if self.notifier: 
+                        self.notifier.notify(
+                                'url check failure for %s -- %s' % \
+                                (check.url,result['reason'])
+                                )
 
                     check.notified = True
 
@@ -160,30 +166,38 @@ class Uptime(object):
                 if check.failures > 10:
                     check.last = datetime.utcnow()
 
-                path = self.results_path + '/' + check.id
-                self.etcd.set(path,check.json())
+                key = self.results_path + check.check_id
+                self.redis.set(key,check.dump_json())
 
             gevent.sleep(0)
 
-    def _add_check(self,key,value):
-        id = os.path.basename(key)
-        if id in [ str(c.id) for c in self.checks]:
-            log.debug('skipping existing check for %s' % id)
-        else:
-            self.checks.append(Check(id,value))
+    def _add_check(self,check):
+        """
+        Internal method to add a check for the controller to schedule, 
+        if it exists
+        params:
+         - check(dict): dictionary of check config
+        """
+        check_id = check['check_id']
+        if check_id not in [ str(c.check_id) for c in self.checks]:
+            self.checks.append(Check(json.dumps(check)))
 
     def _remove_check(self,id):
-        [ self.checks.remove(c) for c in self.checks if c.id == id ]
+        #remove loaded check
+        [ self.checks.remove(c) for c in self.checks if c.check_id == id ]
+        #remove check from results in redis
+        key = self.results_path + id
+        self.redis.delete(key)
 
-    def _check_url(self,url,content):
+    def _check_url(self,url,content,timeout=5):
         try:
-            r = requests.get(url,timeout=5)
+            r = requests.get(url,timeout=timeout)
         except ConnectionError as e:
             log.warn('unable to reach %s:\n%s' % (url,e))
             return { 'ok':False,'reason':e,'elapsed':0 }
         except Timeout as e:
             log.warn('connection timed out checking %s:\n%s' % (url,e))
-            return { 'ok':False,'reason':e,'elapsed':elapsed.total_seconds() }
+            return { 'ok':False,'reason':e,'elapsed':timeout }
 
         log.debug('%s returned %s' % (url,r.status_code))
         if not r.ok:
