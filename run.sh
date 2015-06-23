@@ -6,4 +6,4 @@
 
 cd /app/uptime/
 python2 uptime.py &
-gunicorn --bind=0.0.0.0:8000 api:app
+gunicorn -w 8 -k eventlet --bind=0.0.0.0:8000 api:app

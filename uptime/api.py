@@ -41,7 +41,8 @@ def buildview():
 
     r = app.config['REDIS']
 
-    checks = [ r.hgetall(k) for k in r.keys(pattern='uptime_results:*') ]
+    checks = [ json.loads(r.get(k)) for k in \
+                r.keys(pattern='uptime_results:*') ]
 
     return render_template('index.html',
             checks=sorted(checks,key=sorter,reverse=True))

@@ -6,3 +6,4 @@ jsontree==0.4.3
 requests==2.6.0
 gunicorn==0.17.4
 redis==2.10.3
+eventlet==0.17.4

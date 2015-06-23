@@ -34,7 +34,7 @@ class Checks(Resource):
         self._check_auth(args['key'])
         r = app.config['REDIS']
 
-        results = [ r.hgetall(k) for k in r.keys(pattern='uptime_results:*') ]
+        results = [ json.loads(r.get(k)) for k in r.keys(pattern='uptime_results:*') ]
 
         return results
 
@@ -44,6 +44,10 @@ class Checks(Resource):
 
         #remove key from our args and generate a unique id for this check
         del args['key']
+        for k in ['id','content']:
+            if args[k] == None:
+                del args[k]
+
         check_id = str(uuid.uuid1())
         args['check_id'] = check_id
 
@@ -51,7 +55,7 @@ class Checks(Resource):
             args['interval'] = 15
 
         redis = app.config['REDIS']
-        redis.hmset('uptime_config:' + check_id,args)
+        redis.set('uptime_config:' + check_id,json.dumps(args))
 
         return {'check_id':check_id},200
 

@@ -42,10 +42,10 @@ class Check(object):
         self.interval = int(self.interval)
         print('loaded check %s for url %s' % (self.check_id,self.url))
 
-    def dump_dict(self):
+    def dump_json(self):
         ret = jsontree.clone(self.__dict__)
         del ret['last']
-        return ret
+        return json.dumps(ret)
 
     def ok(self):
         """
@@ -77,7 +77,7 @@ class Uptime(object):
             self.notifier = SlackNotifier(Config.SLACK_URL)
         else:
             log.warn('No notifiers configured')
-            self.notified = None
+            self.notifier = None
 
         self.redis = StrictRedis(host=redis_host,port=redis_port)
 
@@ -115,7 +115,8 @@ class Uptime(object):
 
     def _get_configs(self):
         pattern = self.config_path + '*'
-        return [ self.redis.hgetall(k) for k in self.redis.keys(pattern) ]
+        return [ json.loads(self.redis.get(k)) for \
+                k in self.redis.keys(pattern) ]
 
     def _controller(self):
         """
@@ -166,7 +167,7 @@ class Uptime(object):
                     check.last = datetime.utcnow()
 
                 key = self.results_path + check.check_id
-                self.redis.hmset(key,check.dump_dict())
+                self.redis.set(key,check.dump_json())
 
             gevent.sleep(0)
 
@@ -188,15 +189,15 @@ class Uptime(object):
         key = self.results_path + id
         self.redis.delete(key)
 
-    def _check_url(self,url,content):
+    def _check_url(self,url,content,timeout=5):
         try:
-            r = requests.get(url,timeout=5)
+            r = requests.get(url,timeout=timeout)
         except ConnectionError as e:
             log.warn('unable to reach %s:\n%s' % (url,e))
             return { 'ok':False,'reason':e,'elapsed':0 }
         except Timeout as e:
             log.warn('connection timed out checking %s:\n%s' % (url,e))
-            return { 'ok':False,'reason':e,'elapsed':r.elapsed.total_seconds() }
+            return { 'ok':False,'reason':e,'elapsed':timeout }
 
         log.debug('%s returned %s' % (url,r.status_code))
         if not r.ok:
