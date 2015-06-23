@@ -152,8 +152,11 @@ class Uptime(object):
                 
                 if check.failures > 3 and not check.notified and self.notifier:
                     log.info('sending notification for failed check')
-                    self.notifier.notify('url check failure for %s -- %s' % \
-                            (check.url,result['reason']))
+                    if self.notifier: 
+                        self.notifier.notify(
+                                'url check failure for %s -- %s' % \
+                                (check.url,result['reason'])
+                                )
 
                     check.notified = True
 
@@ -175,13 +178,15 @@ class Uptime(object):
          - check(dict): dictionary of check config
         """
         check_id = check['check_id']
-        if check_id in [ str(c.check_id) for c in self.checks]:
-            log.debug('skipping existing check for %s' % check_id)
-        else:
+        if check_id not in [ str(c.check_id) for c in self.checks]:
             self.checks.append(Check(json.dumps(check)))
 
     def _remove_check(self,id):
-        ret = [ self.checks.remove(c) for c in self.checks if c.check_id == id ]
+        #remove loaded check
+        [ self.checks.remove(c) for c in self.checks if c.check_id == id ]
+        #remove check from results in redis
+        key = self.results_path + id
+        self.redis.delete(key)
 
     def _check_url(self,url,content):
         try:

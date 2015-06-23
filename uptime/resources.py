@@ -6,7 +6,7 @@ app = current_app
 
 class Hello(Resource):
     def get(self):
-        return {},403
+        return {},200
 
     def post(self):
         return {},403
@@ -14,7 +14,6 @@ class Hello(Resource):
 class Checks(Resource):
     def delete(self):
         args = self._parse()
-        print(args)
         self._check_auth(args['key'])
 
         redis = app.config['REDIS']
@@ -25,7 +24,6 @@ class Checks(Resource):
         else:
             try:
                 redis.delete('uptime_config:' + args['id'])
-                redis.delete('uptime_results:' + args['id'])
             except KeyError:
                 pass
 
