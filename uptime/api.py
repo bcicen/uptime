@@ -32,7 +32,7 @@ api.add_resource(Hello, '/')
 api.add_resource(Checks, '/checks')
 
 def sorter(d):
-    return float(d['response_time'])
+    return d['url']
 
 @app.route('/checkview',methods=["GET"])
 def buildview():
@@ -44,8 +44,11 @@ def buildview():
     checks = [ json.loads(r.get(k)) for k in \
                 r.keys(pattern='uptime_results:*') ]
 
-    return render_template('index.html',
-            checks=sorted(checks,key=sorter,reverse=True))
+    return render_template('index.html', checks=sorted(checks,key=sorter))
+
+@app.route('/static/<path:path>')
+def send_static(path):
+    return send_from_directory('static', path)
 
 @app.errorhandler(200)
 def forbidden_200(exception):
