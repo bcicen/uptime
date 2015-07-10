@@ -44,7 +44,12 @@ def buildview():
     checks = [ json.loads(r.get(k)) for k in \
                 r.keys(pattern='uptime_results:*') ]
 
-    return render_template('index.html', checks=sorted(checks,key=sorter))
+    total_checks = r.get('uptime_stats:total_checks')
+
+    return render_template('index.html',
+            total_checks=total_checks,
+            checks=sorted(checks,key=sorter)
+            )
 
 @app.route('/static/<path:path>')
 def send_static(path):

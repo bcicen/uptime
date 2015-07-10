@@ -8,21 +8,26 @@
     <style type="text/css">
 
       body{
+        width: 100%;
+        height: 100%;
         margin:0;
         padding:0;
         position:relative;
         //background:#151e25 url(bg.jpg);
         //background-position: 0px -300px;
         //background-repeat:no-repeat;
-        //background-position: bottom center}
+        //background-position: bottom center;
+        font:16px/24px 'Droid Sans', 'Tangerine', 'Inconsolata', serif;
+			}
 
-      #logo {
+      #header {
         width: 100%;
-        height: 45px;
-        padding: 5px;
+        height: 55px;
         background-image: url(/static/uptime.png);
         background-repeat: no-repeat;
-        background-position: 10px 5px;
+        background-position: 20px 5px;
+			  text-align: right;
+				margin-left: -10px;
       }
 
       #line {
@@ -37,9 +42,7 @@
       #wrap {
         width: 100%;
         display: block;
-        padding: 10px;
         text-align: center;
-        font:16px/24px 'Droid Sans', 'Tangerine', 'Inconsolata', serif;
       }
 
       #check {
@@ -80,7 +83,7 @@
   </style>
   </head>
   <body>
-    <div id="logo"></div>
+		<div id="header"> {{ total_checks }} checks performed to date</div>
     <div id="line"></div>
     <div id="wrap"> 
         {% for check in checks %}

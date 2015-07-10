@@ -70,6 +70,7 @@ class Uptime(object):
         self.checks = []
         self.config_path = 'uptime_config:'
         self.results_path = 'uptime_results:' + self.source + ':'
+        self.stats_path = 'uptime_stats:'
 
         self.concurrency = concurrency
 
@@ -80,6 +81,8 @@ class Uptime(object):
             self.notifier = None
 
         self.redis = StrictRedis(host=redis_host,port=redis_port)
+        if not self.redis.exists(self.stats_path):
+            self.redis.set(self.stats_path + 'total_checks', 0)
 
         self.start()
 
@@ -142,6 +145,7 @@ class Uptime(object):
                 log.info('checking %s' % check.url)
 
                 result = self._check_url(check.url,check.content)
+                self.redis.incr(self.stats_path + 'total_checks') 
             
                 check.response_time = result['elapsed']
 
