@@ -2,7 +2,7 @@ import gevent
 import requests
 import logging
 import json
-import jsontree
+import copy
 import os
 from redis import StrictRedis
 from datetime import datetime
@@ -11,8 +11,8 @@ from threading import Thread
 from requests.exceptions import ConnectionError, Timeout
 from time import sleep
 from socket import getfqdn
+
 from notifiers import SlackNotifier
-from config import Config
 
 logging.basicConfig(level=logging.WARN)
 log = logging.getLogger('uptime')
@@ -27,10 +27,11 @@ class Check(object):
         defaults = {'content': None,
                     'interval': 15}
 
-        self.__dict__ = jsontree.loads(check_json)
+        self.url = None
+        self.__dict__ = json.loads(check_json)
 
         # use defaults for undefined optional params
-        for k, v in defaults.iteritems():
+        for k, v in defaults.items():
             if k not in self.__dict__:
                 self.__setattr__(k, v)
 
@@ -45,7 +46,8 @@ class Check(object):
         print('loaded check %s for url %s' % (self.check_id, self.url))
 
     def dump_json(self):
-        ret = jsontree.clone(self.__dict__)
+        #  ret = json.clone(self.__dict__)
+        ret = copy.copy(self.__dict__)
         del ret['last']
         return json.dumps(ret)
 
@@ -60,17 +62,9 @@ class Check(object):
 class Uptime(object):
     jobs = Queue()
 
-    def __init__(self, redis_host='localhost', redis_port=6379, concurrency=5):
-        if 'REDIS_HOST' in Config.__dict__:
-            redis_host = Config.REDIS_HOST
-        # noinspection PyPep8
-        if 'REDIS_PORT' in Config.__dict__:
-            redis_port = Config.REDIS_PORT
-        # noinspection PyPep8
-        if 'SOURCE' in Config.__dict__:
-            self.source = Config.SOURCE
-        else:
-            self.source = getfqdn()
+    def __init__(self, config, concurrency=5):
+        self.config = config
+        self.source = self.config.source
 
         self.checks = []
         self.config_path = 'uptime_config:'
@@ -79,20 +73,21 @@ class Uptime(object):
 
         self.concurrency = concurrency
 
-        if 'SLACK_URL' in Config.__dict__:
-            self.notifier = SlackNotifier(Config.SLACK_URL)
+        if self.config.slack_url:
+            self.notifier = SlackNotifier(self.config.slack_url)
         else:
             log.warn('No notifiers configured')
             self.notifier = None
 
-        self.redis = StrictRedis(host=redis_host, port=redis_port)
+        self.redis = StrictRedis(host=self.config.redis_host, port=self.config.redis_port)
+
         if not self.redis.exists(self.stats_path):
             self.redis.set(self.stats_path + 'total_checks', 0)
 
         self.start()
 
     def start(self):
-        workers = [gevent.spawn(self._check_worker) for n in range(1, self.concurrency)]
+        workers = [gevent.spawn(self._check_worker) for _ in range(1, self.concurrency)]
         workers.append(gevent.spawn(self._controller))
 
         t = Thread(target=self._watcher)
