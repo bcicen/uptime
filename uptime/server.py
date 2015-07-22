@@ -3,18 +3,16 @@ import requests
 import logging
 import json
 import copy
-import os
+
 from redis import StrictRedis
 from datetime import datetime
 from gevent.queue import Queue
 from threading import Thread
 from requests.exceptions import ConnectionError, Timeout
 from time import sleep
-from socket import getfqdn
 
-from notifiers import SlackNotifier
+from uptime.notifiers import SlackNotifier
 
-logging.basicConfig(level=logging.WARN)
 log = logging.getLogger('uptime')
 
 
@@ -43,7 +41,7 @@ class Check(object):
 
         self.last = datetime.utcnow()
         self.interval = int(self.interval)
-        print('loaded check %s for url %s' % (self.check_id, self.url))
+        logging.info('loaded check %s for url %s' % (self.check_id, self.url))
 
     def dump_json(self):
         #  ret = json.clone(self.__dict__)
@@ -60,12 +58,11 @@ class Check(object):
 
 
 class Uptime(object):
-    jobs = Queue()
+    jobs = Queue()  # TODO: Are the consequences of this intended?
 
     def __init__(self, config, concurrency=5):
         self.config = config
         self.source = self.config.source
-
         self.checks = []
         self.config_path = 'uptime_config:'
         self.results_path = 'uptime_results:' + self.source + ':'
@@ -117,7 +114,7 @@ class Uptime(object):
 
     def _get_configs(self):
         pattern = self.config_path + '*'
-        return [json.loads(self.redis.get(k)) for
+        return [json.loads(self.redis.get(k).decode(self.config.encoding)) for
                 k in self.redis.keys(pattern)]
 
     def _controller(self):
@@ -137,6 +134,7 @@ class Uptime(object):
         Worker to perform url checks
         """
         print('worker started')
+        logging.info('[{}] worker started'.format(id(self)))
         while True:
             while not self.jobs.empty():
                 check = self.jobs.get()

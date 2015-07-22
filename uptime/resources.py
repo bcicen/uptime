@@ -1,4 +1,5 @@
 import json
+import logging
 import uuid
 
 from flask import current_app
@@ -49,8 +50,7 @@ class Checks(Resource):
         # remove key from our args and generate a unique id for this check
         del args['key']
         for k in ['id', 'content']:
-            # noinspection PyPep8
-            if args[k] == None:
+            if not args[k]:
                 del args[k]
 
         check_id = str(uuid.uuid1())
@@ -74,5 +74,5 @@ class Checks(Resource):
         return parser.parse_args()
 
     def _check_auth(self, key):
-        if key != app.config['AUTH_KEY']:
+        if key != app.config['auth_key']:
             abort(403)

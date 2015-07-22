@@ -12,7 +12,6 @@ class SlackNotifier(object):
         self.username = username
 
     def notify(self, msg, channel="#system-alerts"):
-        # noinspection PyPep8,PyPep8,PyPep8,PyPep8,PyPep8
         payload = {"channel": channel,
                    "username": self.username,
                    "text": msg,
