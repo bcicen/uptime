@@ -1,16 +1,17 @@
 import json
-import logging
 import uuid
 
 from flask import current_app
 from flask_restful import Resource, reqparse, abort
+
+from uptime import __version__
 
 app = current_app
 
 
 class Hello(Resource):
     def get(self):
-        return {}, 200
+        return {'message': 'UpTime!', 'version': __version__}, 200
 
     def post(self):
         return {}, 403
