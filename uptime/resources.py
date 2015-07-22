@@ -1,15 +1,19 @@
-import json,uuid,os
+import json
+import uuid
+
 from flask import current_app
-from flask_restful import Resource,Api,reqparse,request,abort
+from flask_restful import Resource, reqparse, abort
 
 app = current_app
 
+
 class Hello(Resource):
     def get(self):
-        return {},200
+        return {}, 200
 
     def post(self):
-        return {},403
+        return {}, 403
+
 
 class Checks(Resource):
     def delete(self):
@@ -27,14 +31,14 @@ class Checks(Resource):
             except KeyError:
                 pass
 
-        return {'ok':True},200
+        return {'ok': True}, 200
 
     def get(self):
         args = self._parse()
         self._check_auth(args['key'])
         r = app.config['REDIS']
 
-        results = [ json.loads(r.get(k)) for k in r.keys(pattern='uptime_results:*') ]
+        results = [json.loads(r.get(k)) for k in r.keys(pattern='uptime_results:*')]
 
         return results
 
@@ -42,9 +46,10 @@ class Checks(Resource):
         args = self._parse()
         self._check_auth(args['key'])
 
-        #remove key from our args and generate a unique id for this check
+        # remove key from our args and generate a unique id for this check
         del args['key']
-        for k in ['id','content']:
+        for k in ['id', 'content']:
+            # noinspection PyPep8
             if args[k] == None:
                 del args[k]
 
@@ -55,9 +60,9 @@ class Checks(Resource):
             args['interval'] = 15
 
         redis = app.config['REDIS']
-        redis.set('uptime_config:' + check_id,json.dumps(args))
+        redis.set('uptime_config:' + check_id, json.dumps(args))
 
-        return {'check_id':check_id},200
+        return {'check_id': check_id}, 200
 
     def _parse(self):
         parser = reqparse.RequestParser()
@@ -68,6 +73,6 @@ class Checks(Resource):
         parser.add_argument('content', type=str)
         return parser.parse_args()
 
-    def _check_auth(self,key):
+    def _check_auth(self, key):
         if key != app.config['AUTH_KEY']:
             abort(403)
