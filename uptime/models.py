@@ -1,9 +1,10 @@
-import os
+import copy
+import datetime
+import json
 import logging
+import os
 import socket
 import uuid
-import json
-import datetime
 
 logging.getLogger('uptime')
 
@@ -18,6 +19,7 @@ class Config:
     options = {
         'app_dir': os.path.dirname(os.path.realpath(__file__)),
         'auth_key': str(uuid.uuid4()),
+        'concurrency': 5,
         'debug': True,
         'encoding': 'UTF-8',
         'format': '%(asctime)s - %(levelname)s - %(name)s.%(module)s - %(message)s',
@@ -37,6 +39,7 @@ class Config:
 
         self.app_dir = self.config['app_dir']  # TODO: Figure out how to only specify keys in one place.
         self.auth_key = self.config['auth_key']
+        self.concurrency = self.config['concurrency']
         self.debug = self.config['debug']
         self.encoding = self.config['encoding']
         self.format = self.config['format']
@@ -66,7 +69,7 @@ class Config:
             setattr(self, current_name, new_value)  # Override the config
 
 
-class Check(object):
+class Check:
     """
     URL Check configuration object
     """

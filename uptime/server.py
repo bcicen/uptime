@@ -1,7 +1,10 @@
-import gevent
-import requests
 import logging
 import json
+import signal
+
+import gevent
+import requests
+import gevent.pool
 
 from redis import StrictRedis
 from datetime import datetime
@@ -19,15 +22,14 @@ log = logging.getLogger('uptime')
 class Uptime(object):
     jobs = Queue()  # TODO: Are the consequences of this intended?
 
-    def __init__(self, config, concurrency=5):
+    def __init__(self, config):
+        self.running = False
         self.config = config
-        self.source = self.config.source
         self.checks = []
+        self.pool = gevent.pool.Group()
         self.config_path = 'uptime_config:'
-        self.results_path = 'uptime_results:' + self.source + ':'
+        self.results_path = 'uptime_results:' + self.config.source + ':'
         self.stats_path = 'uptime_stats:'
-
-        self.concurrency = concurrency
 
         if self.config.slack_url:
             self.notifier = SlackNotifier(self.config.slack_url)
@@ -43,12 +45,16 @@ class Uptime(object):
         self.start()
 
     def start(self):
-        workers = [gevent.spawn(self._check_worker) for _ in range(1, self.concurrency)]
+        self.running = True
+        workers = [gevent.spawn(self._check_worker) for _ in range(1, self.config.concurrency)]
         workers.append(gevent.spawn(self._controller))
 
         t = Thread(target=self._watcher)
         t.daemon = True
         t.start()
+
+        gevent.signal(signal.SIGQUIT, gevent.killall, workers)
+        gevent.signal(signal.SIGINT, gevent.killall, workers)
 
         gevent.joinall(workers)
 
@@ -56,7 +62,7 @@ class Uptime(object):
         """
         Worker to poll redis for key changes, updating accordingly
         """
-        while True:
+        while self.running:
             configs = self._get_configs()
 
             # add all checks
@@ -80,7 +86,7 @@ class Uptime(object):
         """
         Controller worker. Submits any overdue checks to queue.
         """
-        while True:
+        while self.running:
             now = datetime.utcnow()
 
             [self.jobs.put_nowait(c) for c in self.checks if
@@ -93,7 +99,7 @@ class Uptime(object):
         Worker to perform url checks
         """
         logging.info('[{}] worker started'.format(id(self)))
-        while True:
+        while self.running:
             while not self.jobs.empty():
                 check = self.jobs.get()
 
