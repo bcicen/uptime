@@ -1,4 +1,5 @@
 import json
+import logging
 
 from flask import Flask, request, render_template
 from flask_restful import Api, abort
@@ -6,6 +7,8 @@ from flask_restful import Api, abort
 from redis import StrictRedis
 
 from uptime.resources import Hello, Checks
+
+logging.getLogger('uptime')
 
 
 class FlaskApp:
@@ -21,7 +24,6 @@ class FlaskApp:
         self.api.add_resource(Hello, '/')
         self.api.add_resource(Checks, '/checks')
         print('Starting uptime with auth_key: %s' % self.config.auth_key)
-
     @staticmethod
     def sorter(d):
         return d['url']

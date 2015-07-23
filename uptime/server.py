@@ -133,7 +133,6 @@ class Uptime(object):
         """
         Worker to perform url checks
         """
-        print('worker started')
         logging.info('[{}] worker started'.format(id(self)))
         while True:
             while not self.jobs.empty():
@@ -212,6 +211,3 @@ class Uptime(object):
 
         return {'ok': True, 'elapsed': r.elapsed.total_seconds()}
 
-
-if __name__ == '__main__':
-    ut = Uptime()

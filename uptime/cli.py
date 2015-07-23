@@ -8,10 +8,12 @@ from uptime.server import Uptime
 from uptime.models import Config
 
 
+logging.basicConfig(level=logging.DEBUG, format=Config.options['format'])
+
+
 class Cli:
     def __init__(self, parsed):
         self.config = Config(**parsed.__dict__)
-        logging.basicConfig(level=logging.DEBUG, format=self.config.format)
 
     def start(self):
         if self.config.mode == 'server':
@@ -23,12 +25,13 @@ class Cli:
         else:
             raise UptimeError(self.config.mode)
 
+
 def main():
     parser = argparse.ArgumentParser(description='UpTime!')
-    parser.add_argument('-d', '--debug', action='store_true', default=Config.defaults['debug'])
-    parser.add_argument('-m', '--mode', default=Config.defaults['mode'], choices=Config.modes)
-    parser.add_argument('-rh', '--redis-host', default=Config.defaults['redis_host'])
-    parser.add_argument('-rp', '--redis-port', default=Config.defaults['redis_port'])
+    parser.add_argument('-d', '--debug', action='store_true', default=Config.options['debug'])
+    parser.add_argument('-m', '--mode', default=Config.options['mode'], choices=Config.modes)
+    parser.add_argument('-rh', '--redis-host', default=Config.options['redis_host'])
+    parser.add_argument('-rp', '--redis-port', default=Config.options['redis_port'])
 
     cli = Cli(parser.parse_args())
     cli.start()
