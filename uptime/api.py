@@ -12,12 +12,12 @@ class FlaskApp:
 
     def __init__(self, config):
         self.config = config
+        self.redis = StrictRedis(host=self.config.redis_host, port=self.config.redis_port)
         self.app = Flask(import_name='uptime', static_folder=self.config.app_dir, template_folder=self.config.app_dir)
         self.app = Flask('uptime', self.config.app_dir + '/templates')
         self.api = Api(self.app)
         self.app.config.from_object(self.config)
         self.app.config['UPTIME'] = self.config
-        self.app.config['REDIS'] = StrictRedis(host=self.config.redis_host, port=self.config.redis_port)
         self.api.add_resource(Hello, '/')
         self.api.add_resource(Checks, '/checks')
         print('Starting uptime with auth_key: %s' % self.config.auth_key)
@@ -32,12 +32,10 @@ class FlaskApp:
             if request.args['key'] != self.config.auth_key:
                 abort(403)
 
-            r = self.app.config['REDIS']
+            checks = [json.loads(self.redis.get(k).decode(self.config.encoding)) for k in
+                      self.redis.keys(pattern='uptime_results:*')]
 
-            checks = [json.loads(r.get(k).decode(self.config.encoding)) for k in
-                      r.keys(pattern='uptime_results:*')]
-
-            total_checks = r.get('uptime_stats:total_checks')
+            total_checks = self.redis.get('uptime_stats:total_checks')
 
             return render_template('index.html',
                                    total_checks=total_checks,

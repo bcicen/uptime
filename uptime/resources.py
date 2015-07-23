@@ -4,6 +4,8 @@ import uuid
 from flask import current_app
 from flask_restful import Resource, reqparse, abort
 
+from redis import StrictRedis
+
 from uptime import __version__
 
 app = current_app
@@ -18,29 +20,33 @@ class Hello(Resource):
 
 
 class Checks(Resource):
+
+    def __init__(self):
+        self.config = app.config['UPTIME']
+        self.redis = StrictRedis(host=self.config.redis_host, port=self.config.redis_port)
+
     def delete(self):
         args = self._parse()
         self._check_auth(args['key'])
 
-        redis = app.config['REDIS']
-
         if args['id'] == 'all':
-            for k in redis.keys(pattern='uptime*'):
-                redis.delete(k)
+            for k in self.redis.keys(pattern='uptime*'):
+                self.redis.delete(k)
         else:
             try:
-                redis.delete('uptime_config:' + args['id'])
+                self.redis.delete('uptime_config:' + args['id'])
             except KeyError:
                 pass
 
         return {'ok': True}, 200
 
     def get(self):
+
         args = self._parse()
         self._check_auth(args['key'])
-        r = app.config['REDIS']
 
-        results = [json.loads(r.get(k)) for k in r.keys(pattern='uptime_results:*')]
+        results = [json.loads(self.redis.get(k).decode(self.config.encoding))
+                   for k in self.redis.keys(pattern='uptime_results:*')]
 
         return results
 
@@ -60,8 +66,7 @@ class Checks(Resource):
         if not args['interval']:
             args['interval'] = 15
 
-        redis = app.config['REDIS']
-        redis.set('uptime_config:' + check_id, json.dumps(args))
+        self.redis.set('uptime_config:' + check_id, json.dumps(args))
 
         return {'check_id': check_id}, 200
 
@@ -75,5 +80,5 @@ class Checks(Resource):
         return parser.parse_args()
 
     def _check_auth(self, key):
-        if key != app.config['auth_key']:
+        if key != self.config.auth_key:
             abort(403)
