@@ -12,6 +12,7 @@ class FlaskApp:
 
     def __init__(self, config):
         self.config = config
+        self.app = Flask(import_name='uptime', static_folder=self.config.app_dir, template_folder=self.config.app_dir)
         self.app = Flask('uptime', self.config.app_dir + '/templates')
         self.api = Api(self.app)
         self.app.config.from_object(self.config)
@@ -43,9 +44,9 @@ class FlaskApp:
                                    checks=sorted(checks, key=self.sorter)
                                    )
 
-        #  @app.route('/static/<path:path>')
-        #  def send_static(path):
-        #    return send_from_directory('static', path)
+        @self.app.route('/static/<path:path>')
+        def send_static(path):
+            return self.app.send_static_file(path.split('/')[-1])
 
         @self.app.errorhandler(200)
         def forbidden_200(exception):
