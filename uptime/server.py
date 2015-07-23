@@ -2,7 +2,6 @@ import gevent
 import requests
 import logging
 import json
-import copy
 
 from redis import StrictRedis
 from datetime import datetime
@@ -12,49 +11,9 @@ from requests.exceptions import ConnectionError, Timeout
 from time import sleep
 
 from uptime.notifiers import SlackNotifier
+from uptime.models import Check
 
 log = logging.getLogger('uptime')
-
-
-class Check(object):
-    """
-    URL Check configuration object
-    """
-
-    def __init__(self, check_json):
-        defaults = {'content': None,
-                    'interval': 15}
-
-        self.url = None
-        self.__dict__ = json.loads(check_json)
-
-        # use defaults for undefined optional params
-        for k, v in defaults.items():
-            if k not in self.__dict__:
-                self.__setattr__(k, v)
-
-        self.check_id = str(self.check_id)
-        self.name = self.check_id
-
-        self.failures = 0
-        self.notified = False
-
-        self.last = datetime.utcnow()
-        self.interval = int(self.interval)
-        logging.info('loaded check %s for url %s' % (self.check_id, self.url))
-
-    def dump_json(self):
-        #  ret = json.clone(self.__dict__)
-        ret = copy.copy(self.__dict__)
-        del ret['last']
-        return json.dumps(ret)
-
-    def ok(self):
-        """
-        Method to reset failures and notify switches following successful check
-        """
-        self.failures = 0
-        self.notified = False
 
 
 class Uptime(object):
