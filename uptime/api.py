@@ -15,12 +15,11 @@ class FlaskApp:
         self.app = Flask('uptime', self.config.app_dir + '/templates')
         self.api = Api(self.app)
         self.app.config.from_object(self.config)
-        for key in self.config.defaults:
-            self.app.config[key] = getattr(self.config, key)
+        self.app.config['UPTIME'] = self.config
         self.app.config['REDIS'] = StrictRedis(host=self.config.redis_host, port=self.config.redis_port)
-        print('Starting uptime with auth_key: %s' % (self.app.config['auth_key']))
         self.api.add_resource(Hello, '/')
         self.api.add_resource(Checks, '/checks')
+        print('Starting uptime with auth_key: %s' % self.config.auth_key)
 
     @staticmethod
     def sorter(d):
@@ -29,7 +28,7 @@ class FlaskApp:
     def initialize(self):
         @self.app.route('/checkview', methods=['GET'])
         def buildview():
-            if request.args['key'] != self.app.config['auth_key']:
+            if request.args['key'] != self.config.auth_key:
                 abort(403)
 
             r = self.app.config['REDIS']
