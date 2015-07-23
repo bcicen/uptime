@@ -64,6 +64,7 @@ class Uptime(object):
         """
         while self.running:
             configs = self._get_configs()
+            logging.info('Got config objects = {}'.format(configs))
 
             # add all checks
             for c in configs:
@@ -145,7 +146,7 @@ class Uptime(object):
         """
         check_id = check['check_id']
         if check_id not in [str(c.check_id) for c in self.checks]:
-            self.checks.append(Check(json.dumps(check)))
+            self.checks.append(Check(**check))
 
     def _remove_check(self, id):
         # remove loaded check

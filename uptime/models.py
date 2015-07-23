@@ -6,10 +6,57 @@ import os
 import socket
 import uuid
 
+from uptime.exceptions import UptimeError
+
 logging.getLogger('uptime')
 
 
-class Config:
+class UptimeEncoder(json.JSONEncoder):
+
+    def default(self, o):
+        if hasattr(o, 'options'):
+            _dict = {key: getattr(o, key) for key in o.options if key not in o.private}
+            _dict['_uptime_object'] = o.__class__.__name__
+            return _dict
+        return json.JSONEncoder.default(self, o)
+
+
+class UptimeObject:
+
+    options = {}
+    private = []
+
+    @classmethod
+    def from_json(cls, raw_json):
+        """
+        Translate raw JSON into an Uptime object
+        """
+
+        def _hook(parsed):
+            """
+            Look through each parsed field.
+            """
+
+            if '_uptime_object' in parsed:
+                if parsed['_uptime_object'] != cls.__name__:
+                    raise UptimeError('Incompatible object: {}'.format(parsed))
+                del parsed['_uptime_object']
+
+            return parsed
+
+        try:
+            return cls(**json.loads(raw_json, object_hook=_hook))
+        except (TypeError, ValueError) as e:
+            logging.warning('JSON Validation Failed for: {}'.format(e))
+            raise
+
+    def _log_config(self):
+            logging.debug('Current configuration: \n {}'.format('\n '.join(
+                {x + '=' + str(getattr(self, x)): getattr(self, x) for x in self.options}
+            )))
+
+
+class Config(UptimeObject):
     """
     The Config object holds configuration values across the Uptime application.
     Defaults are specified in the "options" dictionary, which may be overridden
@@ -51,10 +98,7 @@ class Config:
         self._get_env()
 
     def _get_env(self):
-        logging.debug('Current configuration: \n {}'.format('\n '.join(
-            {x + '=' + str(getattr(self, x)): getattr(self, x) for x in self.options}
-        )))
-        logging.debug('Detecting environment variables')
+        self._log_config()
         environment_vars = [x for x in self.options if 'UPTIME_' + x.upper() in os.environ]
         for env_variable in environment_vars:  # Check to see if an environment variable overrides a config value.
             name = 'UPTIME_' + env_variable.upper()
@@ -69,39 +113,40 @@ class Config:
             setattr(self, current_name, new_value)  # Override the config
 
 
-class Check:
+class Check(UptimeObject):
     """
     URL Check configuration object
     """
 
-    def __init__(self, check_json):
-        defaults = {'content': None,
-                    'interval': 15}
+    options = {
+        'check_id': None,
+        'content': None,
+        'failures': 0,
+        'interval': 15,
+        'name': None,
+        'notified': False,
+        'url': None,
+    }
 
-        self.url = None
-        self.__dict__ = json.loads(check_json)
+    private = ['last']
 
-        # use defaults for undefined optional params
-        for k, v in defaults.items():
-            if k not in self.__dict__:
-                self.__setattr__(k, v)
+    def __init__(self, **kwargs):
+        self._config = copy.copy(self.options)
+        self._config.update(kwargs)
 
-        self.check_id = str(self.check_id)
-        self.name = self.check_id
-
-        self.failures = 0
-        self.notified = False
-
+        self.check_id = self._config['check_id']
+        self.content = self._config['content']
+        self.failures = self._config['failures']
+        self.interval = int(self._config['interval'])
+        self.name = self.check_id  # TODO: Why have a name then?
+        self.notified = self._config['notified']
+        self.url = self._config['url']
         self.last = datetime.datetime.utcnow()
-
-        self.interval = int(self.interval)
         logging.info('loaded check %s for url %s' % (self.check_id, self.url))
+        self._log_config()
 
     def dump_json(self):
-        #  ret = json.clone(self.__dict__)
-        ret = copy.copy(self.__dict__)
-        del ret['last']
-        return json.dumps(ret)
+        return json.dumps(self, cls=UptimeEncoder)
 
     def ok(self):
         """
