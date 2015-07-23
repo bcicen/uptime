@@ -46,10 +46,6 @@ class FlaskApp:
         def send_static(path):
             return self.app.send_static_file(path.split('/')[-1])
 
-        @self.app.errorhandler(200)
-        def forbidden_200(exception):
-            return 'not found', 200
-
         @self.app.errorhandler(403)
         def forbidden_403(exception):
             return 'unauthorized', 403
