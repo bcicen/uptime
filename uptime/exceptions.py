@@ -1,0 +1,3 @@
+
+class UptimeError(Exception):
+    pass

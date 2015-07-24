@@ -1,67 +1,55 @@
-import os,jinja2,json
-from flask import Flask,Response,request,render_template
-from flask_restful import Api,abort
+import json
+import logging
+
+from flask import Flask, request, render_template
+from flask_restful import Api, abort
+
 from redis import StrictRedis
-from uuid import uuid4
-from config import __version__,Config
-from resources import Hello,Checks
 
-DEFAULTS = { 'REDIS_HOST': '127.0.0.1',
-             'REDIS_PORT': '6379',
-             'DEBUG'    : False,
-             'AUTH_KEY' : str(uuid4().hex) }
+from uptime.resources import Hello, Checks
 
-appdir = os.path.dirname(os.path.realpath(__file__))
-app = Flask('uptime',template_folder=appdir + '/templates')
-api = Api(app)
+logging.getLogger('uptime')
 
-#Load config
-app.config.from_object(Config)
 
-for k,v in DEFAULTS.iteritems():
-    if not app.config.has_key(k):
-        app.config[k] = v
+class FlaskApp:
 
-#Create app REDIS client
-app.config['REDIS'] = StrictRedis(host=app.config['REDIS_HOST'],
-                                  port=app.config['REDIS_PORT'])
+    def __init__(self, config):
+        self.config = config
+        self.redis = StrictRedis(host=self.config.redis_host, port=self.config.redis_port)
+        self.app = Flask(import_name='uptime', static_folder=self.config.app_dir, template_folder=self.config.app_dir)
+        self.app = Flask('uptime', self.config.app_dir + '/templates')
+        self.api = Api(self.app)
+        self.app.config.from_object(self.config)
+        self.app.config['UPTIME'] = self.config
+        self.api.add_resource(Hello, '/')
+        self.api.add_resource(Checks, '/checks')
+        print('Starting uptime with auth_key: %s' % self.config.auth_key)
+    @staticmethod
+    def sorter(d):
+        return d['url']
 
-print('Starting uptime with auth_key: %s' % (app.config['AUTH_KEY']))
+    def initialize(self):
+        @self.app.route('/checkview', methods=['GET'])
+        def buildview():
+            if request.args['key'] != self.config.auth_key:
+                abort(403)
 
-api.add_resource(Hello, '/')
-api.add_resource(Checks, '/checks')
+            checks = [json.loads(self.redis.get(k).decode(self.config.encoding)) for k in
+                      self.redis.keys(pattern='uptime_results:*')]
 
-def sorter(d):
-    return d['url']
+            total_checks = self.redis.get('uptime_stats:total_checks')
 
-@app.route('/checkview',methods=["GET"])
-def buildview():
-    if request.args['key'] != app.config['AUTH_KEY']:
-        abort(403)
+            return render_template('index.html',
+                                   total_checks=total_checks,
+                                   checks=sorted(checks, key=self.sorter)
+                                   )
 
-    r = app.config['REDIS']
+        @self.app.route('/static/<path:path>')
+        def send_static(path):
+            return self.app.send_static_file(path.split('/')[-1])
 
-    checks = [ json.loads(r.get(k)) for k in \
-                r.keys(pattern='uptime_results:*') ]
+        @self.app.errorhandler(403)
+        def forbidden_403(exception):
+            return 'unauthorized', 403
 
-    total_checks = r.get('uptime_stats:total_checks')
 
-    return render_template('index.html',
-            total_checks=total_checks,
-            checks=sorted(checks,key=sorter)
-            )
-
-@app.route('/static/<path:path>')
-def send_static(path):
-    return send_from_directory('static', path)
-
-@app.errorhandler(200)
-def forbidden_200(exception):
-    return 'not found', 200
-
-@app.errorhandler(403)
-def forbidden_403(exception):
-    return 'unauthorized', 403
-
-if __name__ == '__main__':
-    app.run(debug=True)
