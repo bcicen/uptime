@@ -1,15 +1,14 @@
 
 import argparse
 import logging
+from gevent.wsgi import WSGIServer
 
 from uptime.api import FlaskApp
 from uptime.exceptions import UptimeError
 from uptime.server import Uptime
 from uptime.models import Config
 
-
 logging.basicConfig(level=logging.DEBUG, format=Config.options['format'])
-
 
 class Cli:
     def __init__(self, parsed):
@@ -21,10 +20,10 @@ class Cli:
         elif self.config.mode == 'api':
             app = FlaskApp(self.config)
             app.initialize()
-            app.app.run(host='0.0.0.0', port=8000)
+            http_server = WSGIServer(('', 8000), app.app)
+            http_server.serve_forever()
         else:
             raise UptimeError(self.config.mode)
-
 
 def main():
     parser = argparse.ArgumentParser(description='UpTime!')
