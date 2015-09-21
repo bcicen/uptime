@@ -89,8 +89,8 @@ class Config(UptimeObject):
 
         self._get_env()
 
-        if self.config.slack_channels:
-            self.config.slack_channels.split(',')
+        if self.slack_channels:
+            self.slack_channels.split(',')
 
     def _get_env(self):
         self._log_config()
