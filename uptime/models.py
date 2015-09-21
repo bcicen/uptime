@@ -75,27 +75,22 @@ class Config(UptimeObject):
         'redis_port': 6379,
         'source': socket.getfqdn(),
         'slack_url': None
+        'slack_channels': None
     }
 
     modes = ['api', 'server']
 
     def __init__(self, **kwargs):
-        options = self.options
-        options.update(kwargs)
-        self.config = options
+        self.config = self.options
+        self.config.update(kwargs)
 
-        self.app_dir = self.config['app_dir']  # TODO: Figure out how to only specify keys in one place.
-        self.auth_key = self.config['auth_key']
-        self.concurrency = self.config['concurrency']
-        self.debug = self.config['debug']
-        self.encoding = self.config['encoding']
-        self.format = self.config['format']
-        self.mode = self.config['mode']
-        self.redis_host = self.config['redis_host']
-        self.redis_port = self.config['redis_port']
-        self.source = self.config['source']
-        self.slack_url = self.config['slack_url']
+        for k,v in self.config.items():
+            self.__setattr__(k, v)
+
         self._get_env()
+
+        if self.config.slack_channels:
+            self.config.slack_channels.split(',')
 
     def _get_env(self):
         self._log_config()
@@ -138,7 +133,7 @@ class Check(UptimeObject):
         self.content = self._config['content']
         self.failures = self._config['failures']
         self.interval = int(self._config['interval'])
-        self.name = self.check_id  # TODO: Why have a name then?
+        self.name = self.check_id
         self.notified = self._config['notified']
         self.url = self._config['url']
         self.last = datetime.datetime.utcnow()

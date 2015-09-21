@@ -31,8 +31,9 @@ class Uptime(object):
         self.results_path = 'uptime_results:' + self.config.source + ':'
         self.stats_path = 'uptime_stats:'
 
-        if self.config.slack_url:
-            self.notifier = SlackNotifier(self.config.slack_url)
+        if self.config.slack_url and self.config.slack_channels:
+            self.notifier = SlackNotifier(self.config.slack_url,
+                                          self.config.slack_channels)
         else:
             log.warn('No notifiers configured')
             self.notifier = None
