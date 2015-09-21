@@ -9,10 +9,7 @@ setup(
     install_requires=['gevent==1.1b1', 'jinja2', 'flask==0.10.1', 'flask_restful==0.3.2', 'redis', 'requests'],
     include_package_data=True,
     classifiers=[
-        'Development Status :: 2 - Pre-Alpha',
         'Environment :: Console',
-        'Intended Audience :: Developers',
-        'License :: OSI Approved :: Apache License',
         'Operating System :: OS Independent',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3.4'
