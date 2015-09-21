@@ -74,7 +74,7 @@ class Config(UptimeObject):
         'redis_host': 'localhost',
         'redis_port': 6379,
         'source': socket.getfqdn(),
-        'slack_url': None
+        'slack_url': None,
         'slack_channels': None
     }
 
