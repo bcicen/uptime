@@ -10,21 +10,9 @@ from uptime.exceptions import UptimeError
 
 logging.getLogger('uptime')
 
-
-class UptimeEncoder(json.JSONEncoder):
-
-    def default(self, o):
-        if hasattr(o, 'options'):
-            _dict = {key: getattr(o, key) for key in o.options if key not in o.private}
-            _dict['_uptime_object'] = o.__class__.__name__
-            return _dict
-        return json.JSONEncoder.default(self, o)
-
-
 class UptimeObject:
 
     options = {}
-    private = []
 
     @classmethod
     def from_json(cls, raw_json):
@@ -123,8 +111,6 @@ class Check(UptimeObject):
         'url': None,
     }
 
-    private = ['last']
-
     def __init__(self, **kwargs):
         self._config = copy.copy(self.options)
         self._config.update(kwargs)
@@ -137,11 +123,18 @@ class Check(UptimeObject):
         self.notified = self._config['notified']
         self.url = self._config['url']
         self.last = datetime.datetime.utcnow()
+        self.response_time = 0
         logging.info('loaded check %s for url %s' % (self.check_id, self.url))
         self._log_config()
 
     def dump_json(self):
-        return json.dumps(self, cls=UptimeEncoder)
+        return json.dumps({ 'check_id': self.check_id,
+                            'failures': self.failures,
+                            'interval': self.interval,
+                            'name': self.name,
+                            'notified': self.notified,
+                            'url': self.url,
+                            'response_time': self.response_time })
 
     def ok(self):
         """

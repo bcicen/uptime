@@ -65,7 +65,6 @@ class Uptime(object):
         """
         while self.running:
             configs = self._get_configs()
-            logging.info('Got config objects = {}'.format(configs))
 
             # add all checks
             for c in configs:
