@@ -8,7 +8,7 @@ COPY requirements.txt /requirements.txt
 RUN pip3 install -r /requirements.txt
 
 COPY . /app
-RUN cd /app && \
-    python3 setup.py install
+WORKDIR /app
+RUN python3 setup.py install
 
 CMD uptime
