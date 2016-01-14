@@ -8,7 +8,7 @@ from uptime.exceptions import UptimeError
 from uptime.server import Uptime
 from uptime.models import Config
 
-logging.basicConfig(level=logging.DEBUG, format=Config.options['format'])
+logging.basicConfig(level=logging.INFO, format=Config.options['format'])
 
 class Cli:
     def __init__(self, parsed):
