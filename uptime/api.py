@@ -16,14 +16,16 @@ class FlaskApp:
     def __init__(self, config):
         self.config = config
         self.redis = StrictRedis(host=self.config.redis_host, port=self.config.redis_port)
-        self.app = Flask(import_name='uptime', static_folder=self.config.app_dir, template_folder=self.config.app_dir)
-        self.app = Flask('uptime', self.config.app_dir + '/templates')
+        self.app = Flask('uptime',
+                         static_folder=self.config.app_dir + '/static',
+                         template_folder=self.config.app_dir + '/templates')
         self.api = Api(self.app)
         self.app.config.from_object(self.config)
         self.app.config['UPTIME'] = self.config
         self.api.add_resource(Hello, '/')
         self.api.add_resource(Checks, '/checks')
         print('Starting uptime with auth_key: %s' % self.config.auth_key)
+
     @staticmethod
     def sorter(d):
         return d['url']
