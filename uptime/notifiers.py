@@ -20,7 +20,7 @@ class SlackNotifier(object):
         self.channel = channel
 
     def notify(self, msg):
-        payload = {"channel": channel,
+        payload = {"channel": self.channel,
                    "username": self.username,
                    "text": msg,
                    "icon_emoji": ":code:"}
