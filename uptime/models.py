@@ -63,7 +63,7 @@ class Config(UptimeObject):
         'redis_port': 6379,
         'source': socket.getfqdn(),
         'slack_url': None,
-        'slack_channels': None
+        'slack_channel': None
     }
 
     modes = ['api', 'server']
@@ -76,9 +76,6 @@ class Config(UptimeObject):
             self.__setattr__(k, v)
 
         self._get_env()
-
-        if self.slack_channels:
-            self.slack_channels.split(',')
 
     def _get_env(self):
         self._log_config()
