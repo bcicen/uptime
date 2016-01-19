@@ -11,4 +11,4 @@ COPY . /app
 WORKDIR /app
 RUN python3 setup.py install
 
-CMD uptime
+CMD /bin/sh /app/run.sh
